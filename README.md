@@ -1,133 +1,133 @@
-# Embedded C Decoupling Skills
+# 嵌入式 C 解耦架构 Skills
 
-A two-skill pack for **bare-metal Cortex-M firmware in C**, designed to compose:
+一个面向 **Cortex-M 裸机嵌入式 C** 固件的双 skill 包，两者设计为可组合使用：
 
-- **`embedded-oop-architecture`** — compile-time project structure & HAL isolation.
-- **`embedded-fnptr-register`** — runtime event notification between modules.
+- **`embedded-oop-architecture`** —— 编译期的项目结构与 HAL 隔离。
+- **`embedded-fnptr-register`** —— 运行时模块间事件通知。
 
-Each skill solves a different axis of "decoupling". They do not overlap; they are designed to be used together. Pick the right one with the decision matrix below.
+两个 skill 各自解决"解耦"的不同维度，互不重叠，专门设计为一起使用。可以通过下面的决策矩阵选择合适的 skill。
 
 ---
 
-## Which Skill Do I Need?
+## 该用哪个 Skill？
 
-| Your question | Use this skill |
+| 你的问题 | 用这个 skill |
 |---|---|
-| "I want to swap STM32 for GD32 without rewriting the App" | `embedded-oop-architecture` |
-| "I want a clean 5-layer project: Interface / Adapter / Device / Board / App" | `embedded-oop-architecture` |
-| "I want to unit-test a Device driver on my laptop with no MCU" | `embedded-oop-architecture` |
-| "My ISR fires and N modules need to react" | `embedded-fnptr-register` |
-| "I want a periodic tick to drive a soft scheduler (no RTOS)" | `embedded-fnptr-register` |
-| "I want a key press to fan out to LED + motor + buzzer + logger" | `embedded-fnptr-register` |
-| "I want UART byte → protocol parser → UI without header coupling" | `embedded-fnptr-register` |
-| "I want both: a portable Device layer that also publishes events" | **Both** — see *Composing the two skills* below |
+| "我想换芯片（STM32 → GD32）而不用重写 App 层" | `embedded-oop-architecture` |
+| "我想要一个清晰的 5 层项目结构：Interface / Adapter / Device / Board / App" | `embedded-oop-architecture` |
+| "我想在 PC 上单元测试 Device 驱动，不需要 MCU" | `embedded-oop-architecture` |
+| "我的 ISR 触发后，N 个模块都需要响应" | `embedded-fnptr-register` |
+| "我想用周期 tick 驱动软调度（不用 RTOS）" | `embedded-fnptr-register` |
+| "我想让一次按键分发到 LED + 电机 + 蜂鸣器 + 日志" | `embedded-fnptr-register` |
+| "我想实现 UART 字节 → 协议解析器 → UI，且彼此不耦合" | `embedded-fnptr-register` |
+| "我都想要：可移植的 Device 层 + 事件订阅能力" | **两个都用** —— 见下文 *两个 Skill 的组合* |
 
 ---
 
-## 1. `embedded-oop-architecture` — 5-Layer Virtual-Table OOP
+## 1. `embedded-oop-architecture` —— 5 层虚表 OOP
 
-A **compile-time decoupling** pattern. Five layers with strict include rules:
+**编译期解耦**模式。5 层结构，严格规定每一层可包含的头文件：
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│  App        main.c / *_app.c        Business logic     │
+│  App        main.c / *_app.c        业务逻辑            │
 ├────────────────────────────────────────────────────────┤
-│  Board      board_config.c         Pin map, wiring     │
+│  Board      board_config.c         引脚映射、装配        │
 ├────────────────────────────────────────────────────────┤
-│  Device     led.c / uart_comm.c    Portable drivers    │
+│  Device     led.c / uart_comm.c    可移植驱动            │
 ├────────────────────────────────────────────────────────┤
-│  Adapter    stm32_gpio.c / gd32_gpio.c  Chip → if       │
+│  Adapter    stm32_gpio.c / gd32_gpio.c  芯片 → 接口      │
 ├────────────────────────────────────────────────────────┤
-│  Interface  igpio.h / iuart.h      Header-only vtable  │
+│  Interface  igpio.h / iuart.h      头文件虚表            │
 └────────────────────────────────────────────────────────┘
-   ▲ Dependencies flow DOWN only. Vendor headers live in Adapter + Platformdefine.h.
+   ▲ 依赖只允许向下流动。Vendor 头文件只存在于 Adapter + Platformdefine.h。
 ```
 
-**Key features:**
+**核心特性：**
 
-- Virtual function tables (`_ops_t`) for runtime polymorphism with zero `malloc`.
-- **Single-header platform isolation** — `Platformdefine.h` plus `platform/<chip>/` build slot.
-- **Dependency injection** through `board_config` — Device code never names a chip.
-- **Switching chips is 3 steps**: change `CURRENT_PLATFORM`, swap build slot, recompile. **Zero edits** to Device / Board / App.
-- **Host-side unit testing** of Devices on a PC, no MCU.
-- CMake template for multi-platform builds.
-- Interface versioning rules (semantic).
+- 虚函数表（`_ops_t`）实现运行时多态，零 `malloc`。
+- **单文件平台隔离** —— `Platformdefine.h` 加上 `platform/<chip>/` 构建槽位。
+- **通过 `board_config` 做依赖注入** —— Device 代码里不出现具体芯片名。
+- **切芯片 3 步搞定**：改 `CURRENT_PLATFORM`、换构建槽位、重新编译。**Device / Board / App 三层代码 0 改动**。
+- 在 PC 上对 Device 做主机侧单元测试，无需 MCU。
+- 支持多平台构建的 CMake 模板。
+- 接口版本管理规则（语义化版本）。
 
-See [`skills/embedded-oop-architecture/SKILL.md`](./skills/embedded-oop-architecture/SKILL.md) for the complete walkthrough, naming conventions, and full skeleton.
+完整 5 步骨架、命名规范、平台切换流程见 [`skills/embedded-oop-architecture/SKILL.md`](./skills/embedded-oop-architecture/SKILL.md)。
 
 ---
 
-## 2. `embedded-fnptr-register` — Function-Pointer Registration
+## 2. `embedded-fnptr-register` —— 函数指针注册模式
 
-A **runtime decoupling** pattern. A producer exposes a registration API; one or many consumers hand over a function pointer. When the event fires, the producer invokes the pointer — **neither side includes the other's header, neither side recompiles when the other changes**.
+**运行时解耦**模式。生产者暴露注册 API；一个或多个消费者提交函数指针。当事件触发时，生产者通过指针调用 —— **两端互不包含对方的头文件、互不因对方变更而重编译**。
 
-**Five pattern variants**, chosen by event shape:
+**5 种模式变体**，按事件形态选择：
 
-| # | Pattern | When |
+| # | 模式 | 适用场景 |
 |---|---|---|
-| 1 | Single Callback | One consumer per event |
-| 2 | Multi-Callback Registry | N independent subscribers, fixed upper bound |
-| 3 | Callback with `void *ctx` | One handler reused across many stateful objects |
-| 4 | ISR-safe Event Queue | Heavy work must NOT run in ISR context |
-| 5 | Pub/Sub with topic filter | Many event kinds, each subscriber wants a subset |
+| 1 | 单回调注册 | 一个事件一个消费者 |
+| 2 | 多回调注册表 | N 个独立订阅者，固定上限 |
+| 3 | 带 `void *ctx` 的回调 | 同一处理函数被多个有状态对象复用 |
+| 4 | ISR-safe 事件队列 | 重活绝对不能跑在 ISR 上下文 |
+| 5 | 带 topic 过滤的发布订阅 | 事件种类多，每个订阅者只关心子集 |
 
-**Key features:**
+**核心特性：**
 
-- **ISR safety** built-in: ISR sets a flag / pushes a queue slot, main loop processes.
-- `volatile` discipline for ISR↔loop shared state.
-- Reentrancy rules for callbacks that trigger other events.
-- Host-side unit tests of dispatchers with stub callbacks.
-- `volatile bool` + ring buffer = single-producer / single-consumer queue, no RTOS, no lock.
+- **ISR 安全**内置：ISR 只置标志位 / 入队，主循环处理。
+- `volatile` 纪律：ISR 与主循环共享状态必须加 `volatile`。
+- 重入规则：避免回调触发的事件再次分发出栈。
+- 用桩回调在主机上对分发器做单元测试。
+- `volatile bool` + 环形缓冲 = 单生产者/单消费者队列，无 RTOS、无锁。
 
-See [`skills/embedded-fnptr-register/SKILL.md`](./skills/embedded-fnptr-register/SKILL.md) for the full pattern library, examples (UART, ADC DMA, key matrix, soft-scheduler), and the end-to-end ISR→queue→dispatcher→subscriber demo.
+完整模式库、示例（UART / ADC DMA / 按键矩阵 / 软调度）、ISR→队列→分发器→订阅者端到端示例见 [`skills/embedded-fnptr-register/SKILL.md`](./skills/embedded-fnptr-register/SKILL.md)。
 
 ---
 
-## Composing the Two Skills
+## 两个 Skill 的组合
 
-The two patterns are designed to compose. A typical OOP project's Device layer exposes hardware events through callback registration, and the App layer subscribes to those events. Neither layer knows the chip; neither layer knows the parser's internals.
+两个模式本身就是为组合而设计的。典型 OOP 项目的 Device 层通过回调注册暴露硬件事件，App 层订阅这些事件，两层都不知道芯片、两层都不知道解析器内部细节。
 
 ```
-platform/stm32/stm32_uart.c     ── adapter: implements iuart_ops
+platform/stm32/stm32_uart.c     ── adapter: 实现 iuart_ops
         │
         ▼
-device/uart_comm.c              ── device:  owns state, calls bus->ops->read(),
-        │                                 also: uart_comm_register_rx(cb, ctx)
+device/uart_comm.c              ── device:  拥有状态，调用 bus->ops->read()，
+        │                                 同时: uart_comm_register_rx(cb, ctx)
         │                                 (← fnptr-register API)
         ▼
-app/protocol.c                  ── subscribes via register_rx; never sees HAL
+app/protocol.c                  ── 通过 register_rx 订阅；从不接触 HAL
         │
         ▼
-app/main.c                      ── poll loop, soft-scheduler, system tick
+app/main.c                      ── 主循环、软调度、系统 tick
 ```
 
-When to introduce `embedded-fnptr-register` **inside** an OOP project:
+OOP 项目中**何时引入** `embedded-fnptr-register`：
 
-- A Device has a "data ready" or "frame complete" event with multiple consumers.
-- A periodic tick must dispatch work to several independent subsystems.
-- You want a parser to be unit-testable on the host (subscribe a mock callback, no UART involved).
+- Device 拥有"数据就绪"或"帧完成"事件，且有多个消费者。
+- 周期 tick 需要把工作分派到多个独立子系统。
+- 希望解析器可以在主机侧做单元测试（订阅一个 mock 回调，不涉及 UART）。
 
 ---
 
-## Tools Used by These Skills
+## Skill 实施时调用的工具
 
-Both skills are designed to be applied with the following toolchain. The agent should use CodeGraph for structural questions and reserve `Read` / `Edit` / `Write` / `Bash` for confirmation and edits.
+两个 skill 都按以下工具链设计。结构性问题优先用 CodeGraph，`Read` / `Edit` / `Write` / `Bash` 用于确认和实际改动。
 
-| Task | Tool | Why |
+| 任务 | 工具 | 用途 |
 |---|---|---|
-| Find all callers of a HAL symbol or ISR | `mcp__codegraph__codegraph_callers` | Locate leaks before refactoring |
-| Trace a flow (ISR → callback, or pin → GPIO register) | `mcp__codegraph__codegraph_trace` | One call returns the whole chain |
-| Verify a vtable / callback signature | `mcp__codegraph__codegraph_node` | Confirm typedefs and field order |
-| Audit directory layout | `mcp__codegraph__codegraph_files` | Verify the 5-layer tree |
-| Refactor an existing file | `Read` then `Edit` | Surgical change |
-| Create a new layer / module | `Write` | One file per role |
-| Build / flash / debug | `Bash` (arm-none-eabi-gcc, openocd, st-flash) | Compile and load |
-| Host-side unit test | `Bash` (host gcc + Unity / CMock) | No MCU required |
-| Static analysis | `Bash` (cppcheck, clang-tidy) | NULL-deref and missing-`volatile` guards |
+| 查找 HAL 符号或 ISR 的所有调用方 | `mcp__codegraph__codegraph_callers` | 重构前定位泄漏点 |
+| 追踪数据流（ISR → 回调，或引脚 → GPIO 寄存器） | `mcp__codegraph__codegraph_trace` | 一次调用返回完整链路 |
+| 确认虚表 / 回调签名 | `mcp__codegraph__codegraph_node` | 验证 typedef 和字段顺序 |
+| 审计目录结构 | `mcp__codegraph__codegraph_files` | 验证 5 层目录树 |
+| 重构现有文件 | `Read` 然后 `Edit` | 外科手术式改动 |
+| 新建层 / 模块 | `Write` | 一层一个文件 |
+| 编译 / 烧录 / 调试 | `Bash`（arm-none-eabi-gcc, openocd, st-flash） | 编译和烧录 |
+| 主机侧单元测试 | `Bash`（主机 gcc + Unity / CMock） | 不需要 MCU |
+| 静态分析 | `Bash`（cppcheck, clang-tidy） | NULL 解引用 / 漏 `volatile` 守卫 |
 
 ---
 
-## Install
+## 安装
 
 ### Hermes
 
@@ -138,25 +138,25 @@ hermes skills install https://raw.githubusercontent.com/gsiliconk/embedded-skill
 
 ### Claude Code
 
-Tell Claude:
+对 Claude 说：
 
-> Install these two skills from <https://github.com/gsiliconk/embedded-skills>:
+> 请安装这两个 skill（来自 <https://github.com/gsiliconk/embedded-skills>）：
 >
-> 1. `skills/embedded-oop-architecture/SKILL.md` — apply its 5-layer rules as my embedded project's architecture.
-> 2. `skills/embedded-fnptr-register/SKILL.md` — apply its callback-registration pattern to all event-driven code in this project.
+> 1. `skills/embedded-oop-architecture/SKILL.md` —— 把它的 5 层规则应用为我嵌入式项目的架构规范。
+> 2. `skills/embedded-fnptr-register/SKILL.md` —— 把它的回调注册模式应用到本项目所有事件驱动代码。
 
 ### Codex CLI
 
-Tell Codex:
+对 Codex 说：
 
-> Read and apply both skills from <https://github.com/gsiliconk/embedded-skills>:
+> 请读取并应用 <https://github.com/gsiliconk/embedded-skills> 中的两个 skill：
 >
-> 1. `skills/embedded-oop-architecture/SKILL.md` — 5-layer architecture.
-> 2. `skills/embedded-fnptr-register/SKILL.md` — function-pointer registration for events.
+> 1. `skills/embedded-oop-architecture/SKILL.md` —— 5 层架构。
+> 2. `skills/embedded-fnptr-register/SKILL.md` —— 用于事件的函数指针注册。
 
 ---
 
-## Repository Layout
+## 仓库结构
 
 ```
 embedded-skills/
@@ -164,25 +164,25 @@ embedded-skills/
 ├── LICENSE
 └── skills/
     ├── embedded-oop-architecture/
-    │   └── SKILL.md        ← 5-layer OOP, platform isolation
+    │   └── SKILL.md        ← 5 层 OOP、平台隔离
     └── embedded-fnptr-register/
-        └── SKILL.md        ← callback registration, event dispatch
+        └── SKILL.md        ← 回调注册、事件分发
 ```
 
 ---
 
-## Versioning
+## 版本管理
 
-Each skill tracks its own `version` in its frontmatter. A bump means:
+每个 skill 在 frontmatter 中维护自己的 `version`。版本号变更语义如下：
 
-- **Major** (3.0.0 → 4.0.0) — breaking rule changes (renamed naming convention, layer model change, removed pattern variant).
-- **Minor** (3.0.0 → 3.1.0) — new pattern, new example, expanded section, no breaking changes to existing rules.
-- **Patch** (3.0.0 → 3.0.1) — typo fix, link fix, code-comment fix.
+- **Major**（3.0.0 → 4.0.0）—— 破坏性规则变更（重命名规范、层模型变更、移除模式变体）。
+- **Minor**（3.0.0 → 3.1.0）—— 新增模式、新增示例、扩展章节，不破坏现有规则。
+- **Patch**（3.0.0 → 3.0.1）—— 错别字、链接、代码注释修复。
 
-The two skills are versioned **independently** — updating one does not require updating the other.
+两个 skill **独立**版本号 —— 升级其中一个不要求升级另一个。
 
 ---
 
-## License
+## 许可证
 
-This repository is released under the [MIT License](./LICENSE).
+本仓库基于 [MIT License](./LICENSE) 发布。
