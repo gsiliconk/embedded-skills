@@ -1,6 +1,6 @@
 ---
 name: embedded-oop-architecture
-description: "Compile-time OOP 5-layer architecture for Cortex-M bare-metal C projects (STM32/GD32/APM32/HC32). Virtual-table polymorphism, dependency injection, single-header platform isolation, and zero code change when swapping chips. Use when starting a new embedded project, designing a multi-platform firmware framework, or doing HAL abstraction. NOT for event notification between modules — use embedded-fnptr-register for that."
+description: "Compile-time OOP 5-layer architecture for Cortex-M bare-metal C projects (STM32/GD32/APM32/HC32). Virtual-table polymorphism, dependency injection, single-header platform isolation, and zero code change when swapping chips. Use when starting a new embedded project, designing a multi-platform firmware framework, or doing HAL abstraction. NOT for event notification between modules — use embedded-fnptr-register for that. When the task could be solved by either this skill or embedded-fnptr-register, follow the Self-Assessment Protocol: score both, and if their scores differ by 2 or less, ask the user to choose (do not pick silently)."
 version: 3.0.0
 author: ZHAO Yankun + Hermes
 platforms: [universal]
@@ -32,6 +32,82 @@ Use it when **any** of the following is true:
 - You are tired of `#ifdef STM32 … #elif GD32 …` smeared across business code.
 
 **Do not use it** for: one-off blinky demos, projects that will never leave one chip, or anything where "move fast" beats "live long".
+
+## Triggering Conditions
+
+Activate this skill when the user's request contains any of these signals. When in doubt, see `## Self-Assessment Protocol` below — that is the authoritative tie-breaker.
+
+**Strong signals (definitely activate):**
+
+- User mentions: "5 层", "layer", "分層", "架构", "architecture", "HAL 抽象", "platform", "平台切换", "STM32 ↔ GD32", "vendor header 隔离", "适配", "adapter", "虚表", "vtable", "依赖注入", "DI", "dependency injection".
+- User is starting a new project and asks "how should I structure the files?".
+- User is migrating from one chip to another and wants to avoid `#ifdef` proliferation.
+- User wants Device drivers to be unit-testable on a host PC.
+
+**Weak signals (probably activate, but assess):**
+
+- User says "the business code is too coupled to the HAL" or "I can't test this without a board". This skill is one of the answers; the other is `embedded-fnptr-register`'s host-test recipe.
+- User wants more separation between "what to do" and "how to do it on this chip".
+
+**Anti-signals (do NOT activate — wrong skill):**
+
+- User says "I want my ISR to notify several modules", "I want a key press to fan out", "I want a soft scheduler". → That's `embedded-fnptr-register`, not this.
+- User is doing a one-off, single-chip, throwaway project. → The 5-layer cost is not worth it.
+- The user just wants a function pointer for one isolated ISR. → `embedded-fnptr-register` is cheaper.
+
+## Self-Assessment Protocol
+
+When you (the agent) read a user request, do **not** silently pick this skill. Score both this skill and `embedded-fnptr-register` against the request, and follow the rule in Step 3.
+
+### Step 1 — Extract the task's intent
+
+Map the user's request to these five intent categories (a task can hit more than one):
+
+| Tag | Intent |
+|---|---|
+| **A. Event dispatch** | "ISR fires → N handlers", "publish/subscribe", "soft-scheduler" |
+| **B. Project layering** | "5-layer structure", "where do I put X", "file organization" |
+| **C. Platform isolation** | "swap STM32 ↔ GD32", "no vendor header in business code" |
+| **D. Dependency injection** | "unit-testable", "mockable", "pluggable" |
+| **E. Code generation** | "boilerplate", "scaffold", "generate layer" |
+
+### Step 2 — Score each skill 0–3 per dimension
+
+| Dimension | What to score | This skill's typical range |
+|---|---|---|
+| **Fit** | How well does the skill's core pattern match the dominant intent? | High for B/C/D, low for A |
+| **Cost** | How much code/ceremony does the skill add? | Medium (5 files per peripheral: if, adapter, device, board, app) |
+| **Value** | What does the user gain from using it? | High for multi-platform or long-lived projects |
+| **Testability** | Does it make the result easier to unit-test? | High (host gcc + mock adapter) |
+
+Total = sum of the 4 dimensions (max 12).
+
+### Step 3 — Decide (do not skip)
+
+| Situation | Action |
+|---|---|
+| This skill's total ≥ 9 **and** `embedded-fnptr-register`'s total < 6 | **Single recommendation, no question.** State "use this skill" with one-line reasoning. |
+| Score difference > 2 in either direction | **Single recommendation.** Briefly say why the other skill is not the right fit. |
+| Score difference ≤ 2 | **MUST use `AskUserQuestion`.** Do not pick silently. Use the question template below. |
+| Both skills score < 4 | **Neither matches.** Do not invoke any skill. Ask the user to clarify the goal. |
+
+### How to Ask the User (When Scores Are Within 2)
+
+Use the `AskUserQuestion` tool. Always provide 3 mutually exclusive options plus the implicit "Other".
+
+```
+Question: 你的核心需求更接近哪一种？
+Header:   Goal
+Options:
+  1. [label] "项目结构和平台适配（embedded-oop-architecture）"
+            "5 层架构 / 切芯片 / HAL 隔离 / 编译期解耦 / Device 单测"
+  2. [label] "事件分发和模块解耦（embedded-fnptr-register）"
+            "ISR 通知 / 多订阅者 / 软调度 / 解耦生产者与消费者"
+  3. [label] "两者都需要"
+            "可移植 Device 层 + 事件订阅；参考 SKILL.md 的 Composing 章节"
+```
+
+If the user picks option 3, you may use **both** skills and reference each skill's *Composing with the Other Skill* section.
 
 ## The 5-Layer Model
 

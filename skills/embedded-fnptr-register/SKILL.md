@@ -1,6 +1,6 @@
 ---
 name: embedded-fnptr-register
-description: "Function-pointer registration (callback) pattern for event-driven embedded C projects without an RTOS. Decouples producer (UART ISR, ADC DMA, key scan, timer tick) from consumer (parser, state machine, UI) by registering a function pointer at runtime. Use when one module must notify one or many subscribers (UART RX, ADC done, key events, periodic soft-scheduling). NOT for project-level layering or cross-platform HAL abstraction — use embedded-oop-architecture for that."
+description: "Function-pointer registration (callback) pattern for event-driven embedded C projects without an RTOS. Decouples producer (UART ISR, ADC DMA, key scan, timer tick) from consumer (parser, state machine, UI) by registering a function pointer at runtime. Use when one module must notify one or many subscribers (UART RX, ADC done, key events, periodic soft-scheduling). NOT for project-level layering or cross-platform HAL abstraction — use embedded-oop-architecture for that. When the task could be solved by either this skill or embedded-oop-architecture, follow the Self-Assessment Protocol: score both, and if their scores differ by 2 or less, ask the user to choose (do not pick silently)."
 version: 3.0.0
 author: ZHAO Yankun + Hermes
 platforms: [universal]
@@ -31,6 +31,81 @@ Use it when **any** of the following is true:
 - You need 1-to-N fan-out (one producer → N subscribers) without a queue or RTOS event flag.
 
 **Do not use it** for: long-distance IPC, multi-threaded producers, dynamic plugin loading, or anything that requires a real-time guarantee beyond "best effort, run-to-completion".
+
+## Triggering Conditions
+
+Activate this skill when the user's request contains any of these signals. When in doubt, see `## Self-Assessment Protocol` below — that is the authoritative tie-breaker.
+
+**Strong signals (definitely activate):**
+
+- User mentions: "ISR", "中断", "callback", "回调", "event", "事件", "notify", "通知", "subscribe", "订阅", "interrupt handler", "软调度", "soft scheduler", "timer tick", "周期任务".
+- User describes a producer/consumer topology ("X fires, then Y runs", "after the ADC finishes, ...").
+- User is wiring up a new peripheral and asks "how do I let the App layer know?".
+
+**Weak signals (probably activate, but assess):**
+
+- User wants to "decouple" two modules and the decoupling target is **runtime / event-driven** rather than **compile-time / structural**. (If structural, hand off to `embedded-oop-architecture`.)
+- User asks how to make ISR code shorter, simpler, or non-blocking.
+
+**Anti-signals (do NOT activate — wrong skill):**
+
+- User says "I want to swap chips", "I want a 5-layer project", "vendor headers are leaking into my business code". → That's `embedded-oop-architecture`, not this.
+- User says "I want a blinky", "I want a hello world" with no event/notification need. → No skill needed.
+- The only consumer is the App itself, with no ISR, no tick, no fan-out. → A direct function call is simpler than a callback.
+
+## Self-Assessment Protocol
+
+When you (the agent) read a user request, do **not** silently pick this skill. Score both this skill and `embedded-oop-architecture` against the request, and follow the rule in Step 3.
+
+### Step 1 — Extract the task's intent
+
+Map the user's request to these five intent categories (a task can hit more than one):
+
+| Tag | Intent |
+|---|---|
+| **A. Event dispatch** | "ISR fires → N handlers", "publish/subscribe", "soft-scheduler" |
+| **B. Project layering** | "5-layer structure", "where do I put X", "file organization" |
+| **C. Platform isolation** | "swap STM32 ↔ GD32", "no vendor header in business code" |
+| **D. Dependency injection** | "unit-testable", "mockable", "pluggable" |
+| **E. Code generation** | "boilerplate", "scaffold", "generate layer" |
+
+### Step 2 — Score each skill 0–3 per dimension
+
+| Dimension | What to score | This skill's typical range |
+|---|---|---|
+| **Fit** | How well does the skill's core pattern match the dominant intent? | High for A, low for B/C |
+| **Cost** | How much code/ceremony does the skill add? | Low (one struct + one register fn) |
+| **Value** | What does the user gain from using it? | High if the producer has ≥ 2 consumers or ≥ 1 ISR |
+| **Testability** | Does it make the result easier to unit-test? | Medium (host stubs) |
+
+Total = sum of the 4 dimensions (max 12).
+
+### Step 3 — Decide (do not skip)
+
+| Situation | Action |
+|---|---|
+| This skill's total ≥ 9 **and** `embedded-oop-architecture`'s total < 6 | **Single recommendation, no question.** State "use this skill" with one-line reasoning. |
+| Score difference > 2 in either direction | **Single recommendation.** Briefly say why the other skill is not the right fit. |
+| Score difference ≤ 2 | **MUST use `AskUserQuestion`.** Do not pick silently. Use the question template below. |
+| Both skills score < 4 | **Neither matches.** Do not invoke any skill. Ask the user to clarify the goal. |
+
+### How to Ask the User (When Scores Are Within 2)
+
+Use the `AskUserQuestion` tool. Always provide 3 mutually exclusive options plus the implicit "Other" (the tool adds it automatically).
+
+```
+Question: 你的核心需求更接近哪一种？
+Header:   Goal
+Options:
+  1. [label] "事件分发和模块解耦（embedded-fnptr-register）"
+            "ISR 通知 / 多订阅者 / 软调度 / 解耦生产者与消费者"
+  2. [label] "项目结构和平台适配（embedded-oop-architecture）"
+            "5 层架构 / 切芯片 / HAL 隔离 / 编译期解耦"
+  3. [label] "两者都需要"
+            "可移植 Device 层 + 事件订阅；参考 SKILL.md 的 Composing 章节"
+```
+
+If the user picks option 3, you may use **both** skills and reference each skill's *Composing with the Other Skill* section.
 
 ## Decision Tree — Choose the Variant
 
